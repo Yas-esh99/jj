@@ -222,7 +222,7 @@ function SymptomsPage() {
     };
 
     try {
-      const response = await fetch("https://unviable-reps-grandkid.ngrok-free.dev/predict", {
+      const response = await fetch("https://unviable-reps-grandkid.ngrok-free.dev/predict_with_report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
