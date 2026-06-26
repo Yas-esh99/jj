@@ -1,0 +1,493 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  Mic,
+  Camera,
+  FileText,
+  Sparkles,
+  Thermometer,
+  HeartPulse,
+  Activity,
+  Gauge,
+  Mars,
+  Venus,
+  Loader2,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+export const Route = createFileRoute("/symptoms")({
+  head: () => ({ meta: [{ title: "Healthbox AI Diagnostics" }] }),
+  component: SymptomsPage,
+});
+
+const CONDITIONS = ["Diabetes", "Hypertension", "Asthma", "Heart Disease", "None"];
+const HABITS = ["Smoking", "Tobacco Chewing", "Regular Alcohol"];
+const RED_FLAGS = [
+  "Fever / Chills",
+  "Unexplained Weight Loss",
+  "Shortness of Breath",
+  "Persistent Cough",
+  "Nausea / Vomiting",
+  "Diarrhea",
+];
+
+const SAMPLE_PHRASES = [
+  "I have had a fever ",
+  "since two days ago ",
+  "with body pain ",
+  "and a sore throat. ",
+  "I also feel very weak.",
+];
+
+function Section({
+  index,
+  title,
+  children,
+}: {
+  index: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-3xl border border-border bg-card p-5 shadow-sm">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="grid h-8 w-8 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+          {index}
+        </span>
+        <h2 className="text-base font-bold text-foreground">{title}</h2>
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
+
+function VitalField({
+  icon: Icon,
+  label,
+  placeholder,
+  type = "number",
+  value,
+  onChange,
+}: {
+  icon: React.ElementType;
+  label: string;
+  placeholder?: string;
+  type?: string;
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-background p-3">
+      <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <Icon className="h-4 w-4 text-primary" />
+        {label}
+      </Label>
+      <Input type={type} inputMode={type === "number" ? "decimal" : "text"} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} className="h-11 border-0 bg-transparent px-0 text-base font-bold focus-visible:ring-0" />
+    </div>
+  );
+}
+
+function SymptomsPage() {
+  const navigate = useNavigate();
+
+  const [gender, setGender] = useState<"male" | "female" | null>(null);
+  const [age, setAge] = useState("");
+  const [temp, setTemp] = useState("");
+  const [heartRate, setHeartRate] = useState("");
+  const [spo2, setSpo2] = useState("");
+  const [bp, setBp] = useState("");
+
+  const [conditions, setConditions] = useState<string[]>([]);
+  const [medications, setMedications] = useState("");
+  const [allergies, setAllergies] = useState("");
+
+  const [habits, setHabits] = useState<string[]>([]);
+  const [travel, setTravel] = useState("");
+  const [water, setWater] = useState("");
+
+  const [onset, setOnset] = useState("");
+  const [location, setLocation] = useState("");
+  const [quality, setQuality] = useState("");
+  const [aggravating, setAggravating] = useState("");
+  
+  const [flags, setFlags] = useState<string[]>([]);
+  const [severity, setSeverity] = useState([5]);
+  const [transcript, setTranscript] = useState("");
+  const [listening, setListening] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const phraseIdx = useRef(0);
+
+  const [photoBase64, setPhotoBase64] = useState<string | null>(null);
+  const [reportBase64, setReportBase64] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!listening) return;
+    const id = setInterval(() => {
+      if (phraseIdx.current >= SAMPLE_PHRASES.length) {
+        setListening(false);
+        return;
+      }
+      setTranscript((t) => t + SAMPLE_PHRASES[phraseIdx.current]);
+      phraseIdx.current += 1;
+    }, 1000);
+    return () => clearInterval(id);
+  }, [listening]);
+
+  const toggle = (
+    value: string,
+    list: string[],
+    setList: (v: string[]) => void,
+  ) => {
+    setList(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
+  };
+
+  const toggleListening = () => {
+    if (listening) {
+      setListening(false);
+      return;
+    }
+    phraseIdx.current = 0;
+    setListening(true);
+  };
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>, setter: (v: string) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setter(reader.result);
+        toast("File uploaded successfully");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const submit = async () => {
+    if (!gender || !age) {
+      toast.error("Please provide gender and age.");
+      return;
+    }
+
+    setProcessing(true);
+    toast("Running AI Diagnosis", { description: "Sending your clinical intake to MedGemma..." });
+
+    const payload = {
+      patient_profile: {
+        gender,
+        age,
+        vitals: {
+          body_temperature: temp || "Unknown",
+          heart_rate: heartRate || "Unknown",
+          spo2: spo2 || "Unknown",
+          blood_pressure: bp || "Unknown",
+        }
+      },
+      medical_background: {
+        pre_existing_conditions: conditions.length > 0 ? conditions : ["None"],
+        current_medications: medications || "None",
+        known_allergies: allergies || "None",
+      },
+      lifestyle_environment: {
+        social_habits: habits.length > 0 ? habits : ["None"],
+        recent_travel: travel || "Unknown",
+        drinking_water_source: water || "Unknown",
+      },
+      symptom_chronology: {
+        onset: onset || "Unknown",
+        location: location || "Unknown",
+        quality: quality || "Unknown",
+        aggravating_alleviating: aggravating || "Unknown",
+        severity_scale: severity[0],
+      },
+      associated_symptoms: flags.length > 0 ? flags : ["None"],
+      free_form_transcript: transcript || "None",
+      uploads_scans: {
+        photo: photoBase64,
+        reports: reportBase64
+      }
+    };
+
+    try {
+      const response = await fetch("https://unviable-reps-grandkid.ngrok-free.dev/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to get diagnosis");
+      }
+
+      const report = await response.json();
+      toast.success("Diagnosis Complete");
+      navigate({ to: "/triage-results", state: { report } as any });
+    } catch (error) {
+      console.error(error);
+      toast.error("AI engine is currently unavailable or still booting.");
+      setProcessing(false);
+    }
+  };
+
+  return (
+    <div className="min-h-dvh bg-muted/40 pb-28">
+      <header className="sticky top-0 z-20 bg-primary px-4 pb-5 pt-[calc(env(safe-area-inset-top)+0.75rem)] text-primary-foreground shadow-md">
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/home" })}
+          className="mb-3 flex items-center gap-1.5 text-sm font-semibold opacity-90"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+        <h1 className="flex items-center gap-2 text-xl font-extrabold">
+          <Sparkles className="h-5 w-5" /> Healthbox AI Diagnostics
+        </h1>
+        <p className="mt-0.5 text-sm opacity-90">Complete Clinical Intake</p>
+      </header>
+
+      <main className="mx-auto max-w-md space-y-4 px-4 py-5">
+        <Section index="1" title="Patient Profile & Vitals">
+          <div className="grid grid-cols-2 gap-3">
+            {(["male", "female"] as const).map((g) => {
+              const Icon = g === "male" ? Mars : Venus;
+              const active = gender === g;
+              return (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGender(g)}
+                  className={`flex items-center justify-center gap-2 rounded-2xl border-2 py-3.5 text-base font-bold capitalize transition-colors ${
+                    active
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-foreground"
+                  }`}
+                >
+                  <Icon className="h-5 w-5" /> {g}
+                </button>
+              );
+            })}
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-3">
+            <Label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Age</Label>
+            <Input type="number" inputMode="numeric" placeholder="e.g., 34" value={age} onChange={(e) => setAge(e.target.value)} className="h-11 border-0 bg-transparent px-0 text-base font-bold focus-visible:ring-0" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <VitalField icon={Thermometer} label="Body Temp (°F/°C)" placeholder="98.6" value={temp} onChange={setTemp} />
+            <VitalField icon={HeartPulse} label="Heart Rate (BPM)" placeholder="72" value={heartRate} onChange={setHeartRate} />
+            <VitalField icon={Activity} label="SpO2 (%)" placeholder="98" value={spo2} onChange={setSpo2} />
+            <VitalField icon={Gauge} label="Blood Pressure" placeholder="120/80" type="text" value={bp} onChange={setBp} />
+          </div>
+        </Section>
+
+        <Section index="2" title="Medical Background">
+          <div>
+            <Label className="mb-2 block text-sm font-semibold text-foreground">Pre-existing Conditions</Label>
+            <div className="flex flex-wrap gap-2">
+              {CONDITIONS.map((c) => {
+                const active = conditions.includes(c);
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => toggle(c, conditions, setConditions)}
+                    className={`rounded-full border-2 px-4 py-2 text-sm font-semibold transition-colors ${
+                      active
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background text-foreground"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-sm font-semibold text-foreground">Current Medications or Local Remedies</Label>
+            <Input placeholder="e.g., Metformin, herbal tea" className="h-12" value={medications} onChange={(e) => setMedications(e.target.value)} />
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-sm font-semibold text-foreground">Known Allergies</Label>
+            <Input placeholder="e.g., Penicillin" className="h-12" value={allergies} onChange={(e) => setAllergies(e.target.value)} />
+          </div>
+        </Section>
+
+        <Section index="3" title="Lifestyle & Environment">
+          <div>
+            <Label className="mb-2 block text-sm font-semibold text-foreground">Social Habits</Label>
+            <div className="space-y-2.5">
+              {HABITS.map((h) => (
+                <label key={h} className="flex items-center gap-3 rounded-2xl border border-border bg-background p-3">
+                  <Checkbox checked={habits.includes(h)} onCheckedChange={() => toggle(h, habits, setHabits)} className="h-5 w-5" />
+                  <span className="text-base font-medium text-foreground">{h}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-sm font-semibold text-foreground">Recent Travel to Outbreak Areas?</Label>
+            <Select value={travel} onValueChange={setTravel}>
+              <SelectTrigger className="h-12"><SelectValue placeholder="Select an option" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="yes">Yes</SelectItem>
+                <SelectItem value="no">No</SelectItem>
+                <SelectItem value="unsure">Unsure</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-sm font-semibold text-foreground">Primary Drinking Water Source</Label>
+            <Select value={water} onValueChange={setWater}>
+              <SelectTrigger className="h-12"><SelectValue placeholder="Select source" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tap">Tap</SelectItem>
+                <SelectItem value="well">Well / Borewell</SelectItem>
+                <SelectItem value="ro">Purified / RO</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </Section>
+
+        <Section index="4" title="Primary Symptom Details">
+          <div>
+            <Label className="mb-1.5 block text-sm font-semibold text-foreground">Onset — When did it start?</Label>
+            <Select value={onset} onValueChange={setOnset}>
+              <SelectTrigger className="h-12"><SelectValue placeholder="Select timing" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="2-3days">2-3 Days</SelectItem>
+                <SelectItem value="week">A Week</SelectItem>
+                <SelectItem value="month">1+ Months</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-sm font-semibold text-foreground">Location — Where is the discomfort? Does it move?</Label>
+            <Input placeholder="e.g., Lower abdomen, moves to back" className="h-12" value={location} onChange={(e) => setLocation(e.target.value)} />
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-sm font-semibold text-foreground">Quality — What does it feel like?</Label>
+            <Select value={quality} onValueChange={setQuality}>
+              <SelectTrigger className="h-12"><SelectValue placeholder="Select sensation" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sharp">Sharp</SelectItem>
+                <SelectItem value="dull">Dull Ache</SelectItem>
+                <SelectItem value="burning">Burning</SelectItem>
+                <SelectItem value="throbbing">Throbbing</SelectItem>
+                <SelectItem value="cramping">Cramping</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-sm font-semibold text-foreground">Aggravating / Alleviating — What makes it better or worse?</Label>
+            <Input placeholder="e.g., Worse after eating, better with rest" className="h-12" value={aggravating} onChange={(e) => setAggravating(e.target.value)} />
+          </div>
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <Label className="text-sm font-semibold text-foreground">Severity Scale</Label>
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-sm font-bold text-primary">{severity[0]} / 10</span>
+            </div>
+            <Slider min={1} max={10} step={1} value={severity} onValueChange={setSeverity} />
+            <div className="mt-1.5 flex justify-between text-xs font-medium text-muted-foreground">
+              <span>1 = Mild</span>
+              <span>10 = Unbearable</span>
+            </div>
+          </div>
+        </Section>
+
+        <Section index="5" title="Associated Symptoms">
+          <div className="grid grid-cols-2 gap-2.5">
+            {RED_FLAGS.map((f) => {
+              const active = flags.includes(f);
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => toggle(f, flags, setFlags)}
+                  className={`flex items-center gap-2 rounded-2xl border-2 p-3 text-left text-sm font-semibold transition-colors ${
+                    active ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-background text-foreground"
+                  }`}
+                >
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border-2 ${active ? "border-destructive bg-destructive text-destructive-foreground" : "border-border"}`}>
+                    {active && <span className="text-xs">✓</span>}
+                  </span>
+                  {f}
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+
+        <Section index="6" title="Tell Us Freely">
+          <p className="-mt-2 text-sm text-muted-foreground">Tap the microphone and describe your condition in your own language.</p>
+          <Textarea
+            value={transcript}
+            onChange={(e) => setTranscript(e.target.value)}
+            placeholder="Your spoken words will appear here…"
+            className="min-h-32 resize-none text-base"
+          />
+          <div className="flex justify-center pt-1">
+            <button
+              type="button"
+              onClick={toggleListening}
+              className="relative grid h-20 w-20 place-items-center rounded-full bg-secondary text-secondary-foreground shadow-lg active:scale-95"
+            >
+              {listening && (
+                <>
+                  <span className="absolute inset-0 animate-ping rounded-full bg-secondary opacity-60" />
+                  <span className="absolute -inset-2 animate-pulse rounded-full bg-secondary/30" />
+                </>
+              )}
+              <Mic className="relative h-9 w-9" strokeWidth={2.25} />
+            </button>
+          </div>
+          <p className="text-center text-xs font-semibold text-muted-foreground">{listening ? "Listening…" : "Tap to speak"}</p>
+        </Section>
+
+        <Section index="7" title="Uploads & Scans">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-border bg-background p-5 text-center active:bg-muted">
+              <input type="file" accept="image/*,video/*" className="hidden" onChange={(e) => handleFile(e, setPhotoBase64)} />
+              <Camera className="h-8 w-8 text-primary" />
+              <span className="text-sm font-semibold text-foreground">Affected Area</span>
+              <span className="text-xs text-muted-foreground">Upload a photo or short video (e.g., skin scan).</span>
+              {photoBase64 && <span className="text-xs text-primary font-bold">Image Attached</span>}
+            </label>
+            <label className="flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-border bg-background p-5 text-center active:bg-muted">
+              <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => handleFile(e, setReportBase64)} />
+              <FileText className="h-8 w-8 text-primary" />
+              <span className="text-sm font-semibold text-foreground">Reports & Cards</span>
+              <span className="text-xs text-muted-foreground">Past reports or Ayushman Card for scheme eligibility.</span>
+              {reportBase64 && <span className="text-xs text-primary font-bold">Report Attached</span>}
+            </label>
+          </div>
+        </Section>
+      </main>
+
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={processing}
+          className="mx-auto flex w-full max-w-md items-center justify-center gap-2 rounded-2xl bg-secondary py-4 text-lg font-extrabold text-secondary-foreground shadow-lg active:scale-[0.99] disabled:opacity-70"
+        >
+          {processing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
+          {processing ? "Analyzing…" : "Run AI Diagnosis & Routing"}
+        </button>
+      </div>
+    </div>
+  );
+}

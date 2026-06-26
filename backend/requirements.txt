@@ -1,0 +1,6 @@
+fastapi==0.115.8
+firebase-admin==6.7.0
+pydantic-settings==2.7.1
+PyJWT==2.10.1
+python-multipart==0.0.20
+uvicorn[standard]==0.34.0
