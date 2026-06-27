@@ -15,15 +15,18 @@ import {
   Check,
   X,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { BottomNav } from "@/components/bottom-nav";
+import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/records")({
   head: () => ({ meta: [{ title: "My Records" }] }),
   component: RecordsPage,
 });
 
-type RiskTier = "low" | "moderate" | "high";
+type RiskTier = "low" | "moderate" | "high" | "critical";
 
 type TriageRecord = {
   id: string;
@@ -160,6 +163,12 @@ const RISK_META: Record<RiskTier, { label: string; chip: string; ring: string; I
     ring: "ring-destructive/30",
     Icon: AlertOctagon,
   },
+  critical: {
+    label: "Critical Emergency",
+    chip: "bg-destructive/15 text-destructive",
+    ring: "ring-destructive/30",
+    Icon: AlertOctagon,
+  },
 };
 
 const EVIDENCE_ICON = {
@@ -179,31 +188,75 @@ function formatDate(iso: string) {
   });
 }
 
-function loadRecords(): TriageRecord[] {
-  if (typeof window === "undefined") return SAMPLE_RECORDS;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_RECORDS));
-      return SAMPLE_RECORDS;
-    }
-    const parsed = JSON.parse(raw) as TriageRecord[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : SAMPLE_RECORDS;
-  } catch {
-    return SAMPLE_RECORDS;
-  }
+function mapBackendRecordToTriageRecord(r: any): TriageRecord {
+  return {
+    id: r.id,
+    title: r.report.primary_diagnosis || "Diagnosis",
+    date: r.created_at,
+    risk: (r.report.emergency_level?.toLowerCase() || "moderate") as RiskTier,
+    chiefComplaint: r.chief_complaint || r.report.primary_diagnosis || "AI Diagnostic Triage",
+    summary: `${r.report.primary_diagnosis || "Diagnosis"} (Confidence: ${r.report.confidence_percentage || "N/A"}) · Stage: ${r.report.condition_stage || "N/A"}`,
+    evidence: (r.report.clinical_evidence || []).map((item: string) => {
+      const lower = item.toLowerCase();
+      let icon: "log" | "temp" | "vitals" | "scan" = "log";
+      if (lower.includes("temp") || lower.includes("temperature")) icon = "temp";
+      else if (lower.includes("bpm") || lower.includes("spo2") || lower.includes("blood pressure") || lower.includes("heart rate")) icon = "vitals";
+      else if (lower.includes("dermal") || lower.includes("irritation") || lower.includes("scan") || lower.includes("boundary")) icon = "scan";
+      return {
+        label: "Clinical Evidence",
+        value: item,
+        icon,
+      };
+    }),
+    doList: r.report.approved_protocols || [],
+    dontList: r.report.contraindicated_actions || [],
+    recommendation: r.report.precautions?.[0] || "Consult a physician if symptoms fail to resolve.",
+  };
 }
 
 function RecordsPage() {
   const navigate = useNavigate();
-  const [records, setRecords] = useState<TriageRecord[]>(SAMPLE_RECORDS);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [records, setRecords] = useState<TriageRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
-    setRecords(loadRecords());
-  }, []);
+    if (!authLoading && !isAuthenticated) {
+      navigate({ to: "/login" });
+      return;
+    }
+
+    if (isAuthenticated) {
+      setLoading(true);
+      apiFetch<any[]>("/records")
+        .then((data) => {
+          const mapped = data.map(mapBackendRecordToTriageRecord);
+          setRecords(mapped);
+        })
+        .catch((err) => {
+          console.error("Failed to load records from backend", err);
+          setRecords([]);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, [isAuthenticated, authLoading, navigate]);
 
   const active = records.find((r) => r.id === openId) ?? null;
+
+  if (authLoading || (isAuthenticated && loading)) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-dvh bg-background pb-28">
@@ -239,42 +292,59 @@ function RecordsPage() {
               </span>
             </div>
 
-            <ul className="flex flex-col gap-3">
-              {records.map((r) => {
-                const meta = RISK_META[r.risk];
-                return (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      onClick={() => setOpenId(r.id)}
-                      className={`flex w-full items-start gap-3 rounded-2xl border-2 border-border bg-card p-4 text-left transition active:scale-[0.99] active:bg-muted ring-1 ${meta.ring}`}
-                    >
-                      <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${meta.chip}`}>
-                        <meta.Icon className="h-5 w-5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className="truncate text-base font-bold text-foreground">
-                            {r.title}
+            {records.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-4 text-center rounded-3xl border-2 border-dashed border-border bg-card">
+                <FolderHeart className="h-16 w-16 text-primary/40 mb-4 animate-pulse" />
+                <h3 className="text-lg font-bold text-foreground">No Records Found</h3>
+                <p className="text-sm text-muted-foreground mt-2 max-w-[280px] leading-relaxed">
+                  You haven't run any AI Diagnostics checks yet. Your dynamic triage reports will appear here.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate({ to: "/symptoms" })}
+                  className="mt-6 w-full rounded-2xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition active:scale-[0.98]"
+                >
+                  Start AI Diagnosis
+                </button>
+              </div>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {records.map((r) => {
+                  const meta = RISK_META[r.risk] || RISK_META.moderate;
+                  return (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenId(r.id)}
+                        className={`flex w-full items-start gap-3 rounded-2xl border-2 border-border bg-card p-4 text-left transition active:scale-[0.99] active:bg-muted ring-1 ${meta.ring}`}
+                      >
+                        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${meta.chip}`}>
+                          <meta.Icon className="h-5 w-5" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2">
+                            <span className="truncate text-base font-bold text-foreground">
+                              {r.title}
+                            </span>
+                          </span>
+                          <span className="mt-0.5 block truncate text-sm text-muted-foreground">
+                            {r.chiefComplaint}
+                          </span>
+                          <span className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {formatDate(r.date)}
+                            <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.chip}`}>
+                              {meta.label}
+                            </span>
                           </span>
                         </span>
-                        <span className="mt-0.5 block truncate text-sm text-muted-foreground">
-                          {r.chiefComplaint}
-                        </span>
-                        <span className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                          <Calendar className="h-3.5 w-3.5" />
-                          {formatDate(r.date)}
-                          <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.chip}`}>
-                            {meta.label}
-                          </span>
-                        </span>
-                      </span>
-                      <ChevronRight className="mt-3 h-5 w-5 shrink-0 text-muted-foreground" />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+                        <ChevronRight className="mt-3 h-5 w-5 shrink-0 text-muted-foreground" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </>
         )}
 

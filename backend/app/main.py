@@ -9,7 +9,8 @@ from app.repositories.users import FirestoreUserRepository
 from app.repositories.hospitals import FirestoreHospitalsRepository
 from app.repositories.pharmacies import FirestorePharmaciesRepository
 from app.repositories.schemes import FirestoreSchemesRepository
-from app.routers import auth, hospitals, pharmacies, schemes
+from app.repositories.records import FirestoreRecordsRepository
+from app.routers import auth, hospitals, pharmacies, schemes, records, chat
 
 
 @asynccontextmanager
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI):
     app.state.hospitals_repository = FirestoreHospitalsRepository(db_client)
     app.state.pharmacies_repository = FirestorePharmaciesRepository(db_client)
     app.state.schemes_repository = FirestoreSchemesRepository(db_client)
+    app.state.records_repository = FirestoreRecordsRepository(db_client)
     yield
 
 
@@ -34,7 +36,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.frontend_origins,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,6 +47,8 @@ app.include_router(auth.router, prefix=settings.api_v1_prefix)
 app.include_router(hospitals.router, prefix=settings.api_v1_prefix)
 app.include_router(pharmacies.router, prefix=settings.api_v1_prefix)
 app.include_router(schemes.router, prefix=settings.api_v1_prefix)
+app.include_router(records.router, prefix=settings.api_v1_prefix)
+app.include_router(chat.router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/")

@@ -296,7 +296,7 @@ async def analyze_with_hospital_report(intake: ComprehensiveIntake):
             If NO: Set 'disease_found_in_report' to false, and leave 'extracted_triage_report' null.
             """
 
-            gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+            gemini_model = genai.GenerativeModel('gemini-2.5-flash')
             response = gemini_model.generate_content(
                 prompt,
                 generation_config=genai.GenerationConfig(

@@ -7,11 +7,14 @@ export function SosButton() {
   return (
     <button
       type="button"
-      onClick={() =>
+      onClick={() => {
         toast.error("Emergency SOS", {
-          description: "Connecting to emergency services...",
-        })
-      }
+          description: "Connecting to emergency services (112)...",
+        });
+        setTimeout(() => {
+          window.location.href = "tel:112";
+        }, 800);
+      }}
       aria-label={t("sos")}
       className="fixed bottom-24 left-5 z-40 grid h-14 w-14 place-items-center rounded-full bg-destructive text-destructive-foreground shadow-[0_10px_30px_-5px_rgba(239,68,68,0.6)] ring-4 ring-destructive/20 transition active:scale-95"
     >

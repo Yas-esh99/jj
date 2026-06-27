@@ -15,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { apiFetch } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -234,6 +235,20 @@ function SymptomsPage() {
 
       const report = await response.json();
       toast.success("Diagnosis Complete");
+
+      // Save report in local database
+      try {
+        await apiFetch("/records", {
+          method: "POST",
+          body: JSON.stringify({
+            report: report,
+            chief_complaint: onset ? `${onset}${location ? ` (Location: ${location})` : ""}` : (transcript || "AI Diagnostic Triage")
+          })
+        });
+      } catch (err) {
+        console.error("Failed to save report to database", err);
+      }
+
       navigate({ to: "/triage-results", state: { report } as any });
     } catch (error) {
       console.error(error);

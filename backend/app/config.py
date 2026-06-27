@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     google_application_credentials: str | None = None
     firebase_project_id: str | None = None
     users_collection: str = "users"
+    gemini_api_key: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

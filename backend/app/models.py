@@ -156,3 +156,27 @@ class Pharmacy(BaseModel):
     coordinates: Coordinates
     medicines: list[Medicine] = Field(default_factory=list)
 
+
+# --- Triage Records Models ---
+
+class CreateRecordRequest(BaseModel):
+    report: dict
+    chief_complaint: str | None = None
+
+
+class TriageRecordResponse(BaseModel):
+    id: str
+    phone_number: str
+    created_at: datetime
+    chief_complaint: str | None = None
+    report: dict
+
+
+class HeatmapPoint(BaseModel):
+    state: str
+    district: str
+    disease: str
+    cases_count: int
+
+
+
